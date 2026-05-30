@@ -11,13 +11,14 @@ from sql import Database
 
 #start error logging
 tracemalloc.start()
-config = open("./config/config.json", "r")
-config_data = json.loads(config.read())
-config.close()
 
-TOKEN = json.loads(open("./config/secrets.json", "r").read())["BOT TOKEN"]
-BOT_COLOR = config_data["BOT COLOR"]
-SERVER_ID = config_data["SERVER ID"]
+with open("./config/config.json", "r") as config:
+	config_data = json.loads(config.read())
+	BOT_COLOR = config_data["BOT COLOR"]
+	SERVER_ID = config_data["SERVER ID"]
+
+with open("./config/secrets.json", "r") as secrets:
+	TOKEN = json.loads(secrets.read())["BOT TOKEN"]
 
 confessions = Database("config/confessions.db")
 
@@ -40,4 +41,6 @@ async def on_ready():
     for guild in bot.guilds:
         if guild.id == SERVER_ID:
             bot.CoroboCult = guild
-            
+           
+if __name__ == "__main__":
+	bot.run(TOKEN)
