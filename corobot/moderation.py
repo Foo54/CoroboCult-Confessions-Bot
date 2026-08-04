@@ -11,24 +11,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = "data/moderation.db"
 
 
-@app_commands.default_permissions(moderate_members=True)
-@app_commands.checks.has_role(MOD_ROLE_ID)
-class ModerationGroup(app_commands.Group):
-	def __init__(self):
-		super().__init__(name="mod", description="Moderation commands")
-
-	async def on_error(
-		self, interaction: discord.Interaction, error: app_commands.AppCommandError
-	):
-		if isinstance(error, app_commands.errors.MissingRole):
-			return await interaction.response.send_message(
-				"You don't have the required role to use this command.", ephemeral=True
-			)
-
-		raise error
-
-
-class ModerationDBManager():
+class ModerationDBManager:
 	def __init__(self, db_path) -> None:
 		self.db_path = db_path
 
@@ -45,7 +28,7 @@ class ModerationDBManager():
 				)
 			""")
 			conn.commit()
-	
+
 	def log_mod_action(self, target_id: int, moderator_id: int, mod_action_type: str, reason: str):
 		with sqlite3.connect(self.db_path) as conn:
 			cursor = conn.cursor()
@@ -65,7 +48,7 @@ class ModerationDBManager():
 			conn.commit()
 
 
-class MessageLogDBManager():
+class MessageLogDBManager:
 	def __init__(self, db_path):
 		self.db_path = db_path
 
@@ -80,7 +63,7 @@ class MessageLogDBManager():
 				)
 			""")
 			conn.commit()
-	
+
 	def log_message(self, author_id: int, message_content: int):
 		with sqlite3.connect(self.db_path) as conn:
 			cursor = conn.cursor()
@@ -96,7 +79,7 @@ class MessageLogDBManager():
 				)
 			)
 			conn.commit()
-	
+
 	def get_message_logs(self, author_id: int):
 		with sqlite3.connect(self.db_path) as conn:
 			cursor = conn.cursor()
@@ -107,7 +90,7 @@ class MessageLogDBManager():
 				(author_id,)
 			)
 			conn.commit()
-	
+
 	def delete_older_than(self, timestamp: int):
 		"""Delete messages older than a given timestamp"""
 		with sqlite3.connect(self.db_path) as conn:
@@ -119,10 +102,15 @@ class MessageLogDBManager():
 				(timestamp,)
 			)
 			conn.commit()
-	
 
-class ModerationCog(commands.Cog, ModerationDBManager):
-	mod_group = ModerationGroup()
+
+@app_commands.default_permissions(moderate_members=True)
+class ModerationCog(
+	commands.GroupCog,
+	ModerationDBManager,
+	name="mod",
+	description="Moderation commands",
+):
 
 	def __init__(self, bot, db_path, log_channel_id):
 		self.bot = bot
@@ -138,8 +126,20 @@ class ModerationCog(commands.Cog, ModerationDBManager):
 			logger.info(f"Moderation logging channel has been set to {self.log_channel.id}")
 		else:
 			logger.warning("Moderation logging channel could not be set!")
+	
+	async def cog_app_command_error(
+    self,
+    interaction: discord.Interaction,
+    error: app_commands.AppCommandError
+  ):
+		if isinstance(error, app_commands.errors.MissingRole):
+			return await interaction.response.send_message(
+				"You don't have the required role to use this command.", ephemeral=True
+			)
+		raise error
 
-	@mod_group.command(name="log-here", description="Set the current log channel")
+	@app_commands.command(name="log-here", description="Set the current log channel")
+	@app_commands.checks.has_role(MOD_ROLE_ID)
 	async def set_log_channel(self, interaction: discord.Interaction):
 		"""Set the current log channel"""
 		self.log_channel = interaction.channel
@@ -147,8 +147,9 @@ class ModerationCog(commands.Cog, ModerationDBManager):
 			f"Log channel updated {interaction.channel.mention}"
 		)
 
-	@mod_group.command(name="warn", description="Send user a warning")
+	@app_commands.command(name="warn", description="Send user a warning")
 	@app_commands.describe(target="Discord user", reason="Warning Message")
+	@app_commands.checks.has_role(MOD_ROLE_ID)
 	async def warn(
 		self,
 		interaction: discord.Interaction,
@@ -200,7 +201,7 @@ class ModerationCog(commands.Cog, ModerationDBManager):
 				mod_action_type="WARN",
 				reason=reason
 			)
-			
+
 			# log mod channel
 			embed.title = f"User: {target.display_name} has been warned!"
 			embed.add_field(name="target", value=target.mention)
@@ -214,9 +215,13 @@ class MessageLoggerCog(commands.Cog, MessageLogDBManager):
 		commands.Cog.__init__(self)
 		MessageLogDBManager.__init__(self, db_path)
 
-	@commands.Cog.listener()
-	async def on_ready(self):
-		self.prune_db.start()
+	async def cog_load(self):
+		if not self.prune_db.is_running():
+			self.prune_db.start()
+
+	async def cog_unload(self):
+		if self.prune_db.is_running():
+			self.prune_db.stop()
 
 	@tasks.loop(minutes=720)
 	async def prune_db(self):
@@ -224,7 +229,7 @@ class MessageLoggerCog(commands.Cog, MessageLogDBManager):
 		cutoff = datetime.datetime.now() - datetime.timedelta(hours=24)
 		self.delete_older_than(int(cutoff.timestamp()))
 		logger.info(f"Prunning database entries older than {cutoff}")
-	
+
 	@commands.Cog.listener()
 	async def on_message_delete(self, message: discord.Message):
 		"""Log deleted messages"""
@@ -235,6 +240,7 @@ class MessageLoggerCog(commands.Cog, MessageLogDBManager):
 		"""Log edited messages"""
 		if len(before.content) != 0 and before.content != after.content:
 			self.log_message(before.author.id, before.content)
+
 
 async def setup(bot):
 	await bot.add_cog(ModerationCog(bot, DB_PATH, LOG_CHANNEL_ID))
