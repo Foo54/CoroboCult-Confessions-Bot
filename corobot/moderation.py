@@ -1,6 +1,6 @@
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from corobot.config import MOD_ROLE_ID, LOG_CHANNEL_ID
 import typing
 import logging
@@ -44,62 +44,6 @@ class ModerationDBManager:
 					mod_action_type,
 					reason
 				)
-			)
-			conn.commit()
-
-
-class MessageLogDBManager:
-	def __init__(self, db_path):
-		self.db_path = db_path
-
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute("""
-				CREATE TABLE IF NOT EXISTS message_log (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					detection_time TIMESTAMP,
-					author_id INTEGER,
-					message_content TEXT
-				)
-			""")
-			conn.commit()
-
-	def log_message(self, author_id: int, message_content: int):
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute(
-				"""
-				INSERT INTO message_log (detection_time, author_id, message_content)
-					VALUES (?, ?, ?)
-				""",
-				(
-					int(datetime.datetime.now().timestamp()),
-					author_id,
-					message_content
-				)
-			)
-			conn.commit()
-
-	def get_message_logs(self, author_id: int):
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute(
-				"""
-				SELECT FROM message_log WHERE author_id == ?
-				""",
-				(author_id,)
-			)
-			conn.commit()
-
-	def delete_older_than(self, timestamp: int):
-		"""Delete messages older than a given timestamp"""
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute(
-				f"""
-				DELETE FROM message_log WHERE detection_time < ?;
-				""",
-				(timestamp,)
 			)
 			conn.commit()
 
@@ -209,39 +153,5 @@ class ModerationCog(
 			await self.log_channel.send(embed=embed)
 
 
-class MessageLoggerCog(commands.Cog, MessageLogDBManager):
-	def __init__(self, bot, db_path):
-		self.bot = bot
-		commands.Cog.__init__(self)
-		MessageLogDBManager.__init__(self, db_path)
-
-	async def cog_load(self):
-		if not self.prune_db.is_running():
-			self.prune_db.start()
-
-	async def cog_unload(self):
-		if self.prune_db.is_running():
-			self.prune_db.stop()
-
-	@tasks.loop(minutes=720)
-	async def prune_db(self):
-		"""Periodically delete old messages"""
-		cutoff = datetime.datetime.now() - datetime.timedelta(hours=24)
-		self.delete_older_than(int(cutoff.timestamp()))
-		logger.info(f"Prunning database entries older than {cutoff}")
-
-	@commands.Cog.listener()
-	async def on_message_delete(self, message: discord.Message):
-		"""Log deleted messages"""
-		self.log_message(message.author.id, message.content)
-
-	@commands.Cog.listener()
-	async def on_message_edit(self, before: discord.Message, after: discord.Message):
-		"""Log edited messages"""
-		if len(before.content) != 0 and before.content != after.content:
-			self.log_message(before.author.id, before.content)
-
-
 async def setup(bot):
 	await bot.add_cog(ModerationCog(bot, DB_PATH, LOG_CHANNEL_ID))
-	await bot.add_cog(MessageLoggerCog(bot, DB_PATH))
