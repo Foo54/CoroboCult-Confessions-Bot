@@ -13,6 +13,10 @@ class MetaCog(commands.Cog):
 	async def ping(self, interaction: discord.Interaction):
 		await interaction.response.send_message("pong")
 
+	@app_commands.command(name="meow", description="meow")
+	async def meow(self, interaction: discord.Interaction):
+		await interaction.response.send_message("meow")
+
 	@app_commands.command(
 		name="help", description="Get a list of commands or info on a single command"
 	)
@@ -21,54 +25,67 @@ class MetaCog(commands.Cog):
 	async def _help(
 		self, interaction: discord.Interaction, cmd: typing.Optional[str] = None
 	):
-		output = ""
-		cmd_list = [
-			command for command in self.bot.tree.walk_commands(guild=interaction.guild)
-		]
+		output_lines = list()
+		cmd_list = list(self.bot.tree.walk_commands(guild=interaction.guild))
+
 		if cmd is None:
-			output = "List of Commands\n```"
-			for command in cmd_list:
-				output += (
-					"/" + command.qualified_name + " - " + command.description + "\n"
-				)
-			output += "\n```"
+			title = "Help all" 
+			output_lines.append("List of Commands\n```")
+			output_lines.extend(
+				f"/{command.qualified_name} - {command.description}"
+					for command in cmd_list
+			)
+			output_lines.append("```")
+		
 		else:
-			cmd_names = [command.qualified_name for command in cmd_list]
-			if cmd not in cmd_names:
-				output = "Please enter a valid cmd (use /help to find them)"
-			else:
-				command = [
-					command for command in cmd_list if command.qualified_name == cmd
-				][0]
-				output = (
-					"`/" + command.qualified_name + "`\n> " + command.description + "\n"
+			title = f"Help {cmd}"
+			command = next(
+				(command for command in cmd_list if command.qualified_name == cmd),
+				None
+			)
+
+			if command is None:
+				return await interaction.response.send_message(
+					"Please enter a valid cmd (use /help to find them)",
+					ephemeral = True
 				)
-				if isinstance(command, app_commands.commands.Group):
-					output += "Sub-commands:\n```\n"
-					for subcommand in command.commands:
-						output += (
-							"\n- " + subcommand.name + " > " + subcommand.description
+
+			output_lines.append(
+				f"`/{command.qualified_name}`\n> {command.description}"
+			)
+
+			if isinstance(command, app_commands.commands.Group):
+				output_lines.append("Sub-commands:\n```")
+				output_lines.extend(
+					f"- {subcommand.name} > {subcommand.description}"
+						for subcommand in command.commands
+				)
+				
+			else:
+				output_lines.append("Parameters:\n```")
+				for parameter in command.parameters:
+					if parameter.required:
+						output_lines.append(
+							f"- <{parameter.display_name}> > {parameter.description}"
 						)
-				else:
-					output += "Parameters:\n```\n"
-					for parameter in command.parameters:
-						output += (
-							"\n- "
-							+ ("<" if parameter.required else "[")
-							+ parameter.display_name
-							+ (">" if parameter.required else "]")
-							+ " > "
-							+ parameter.description
+					else:
+						output_lines.append(
+							f"- [{parameter.display_name}] > {parameter.description}"
 						)
-				output += "\n```"
+
+			output_lines += "```"
+
 		embed = discord.Embed(
-			title="Help: " + ("all" if cmd is None else cmd),
-			description=output,
+			title=title,
+			description="\n".join(output_lines),
 			color=int(BOT_COLOR, 16),
-		).set_footer(
-			text=f"Made by CoroboCult Mod Team",
+		)
+		
+		embed.set_footer(
+			text="Made by CoroboCult Mod Team",
 			icon_url=interaction.client.user.avatar.url,
 		)  # pyright: ignore[reportOptionalMemberAccess]
+
 		await interaction.response.send_message(embed=embed)
 
 	@_help.autocomplete("cmd")
