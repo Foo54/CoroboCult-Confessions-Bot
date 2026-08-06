@@ -34,7 +34,7 @@ async def submit_confession(
 	params = {"COID": _id, "CONT": content, "ATCH": ""}
 
 	embed = discord.Embed(
-		title="Confession #" + str(_id), description=content, color=int(BOT_COLOR, 16)
+		title=f"Confession #{_id}", description=content, color=int(BOT_COLOR, 16)
 	)
 
 	embed.set_footer(
@@ -77,11 +77,7 @@ async def submit_reply(
 		raise ValueError("Confession not found")
 
 	msg = None
-	for (
-		channel
-	) in (
-		await interaction.guild.fetch_channels()
-	):  # pyright: ignore[reportOptionalMemberAccess]
+	for channel in await interaction.guild.fetch_channels():
 		if isinstance(channel, discord.TextChannel):
 			try:
 				msg = await channel.fetch_message(data["message_id"])
@@ -108,7 +104,7 @@ async def submit_reply(
 	params = {"REID": rid, "CONT": content, "ATCH": ""}
 
 	embed = discord.Embed(
-		title="Reply #" + str(_id) + "-" + str(rid),
+		title=f"Reply #{_id}-{rid}",
 		description=content,
 		color=int(BOT_COLOR, 16),
 	)
@@ -179,7 +175,7 @@ class QueryModal(discord.ui.Modal, title="Query Database"):
 
 		await util.send_error_message(
 			interaction,
-			"Unexpected Failure! Please Report (or its a sql error)\n" + str(error),
+			f"Unexpected Failure! Please Report (or its a sql error)\n{error}",
 			ephemeral=True,
 		)
 
@@ -227,7 +223,7 @@ class ParametersModal(discord.ui.Modal, title="Parameters"):
 
 		await util.send_error_message(
 			interaction,
-			"Unexpected Failure! Please Report\n" + str(error),
+			f"Unexpected Failure! Please Report\n{error}",
 			ephemeral=True,
 		)
 
@@ -330,7 +326,7 @@ class ReplyModal(discord.ui.Modal, title="Reply to a Confession"):
 		else:
 			await util.send_error_message(
 				interaction,
-				"Unexpected error, please report:\n" + str(error),
+				f"Unexpected error, please report:\n{error}",
 				ephemeral=True,
 			)
 
@@ -392,7 +388,7 @@ class ConfessionsModCog(
 			)
 		else:
 			macro = confessions_macro_manager.get_macro(name)
-			output = f'`{macro["name"]}` - Created by <@{macro["author_id"]}>'
+			output = f"`{macro["name"]}` - Created by <@{macro["author_id"]}>"
 		embed = discord.Embed(
 			title="Macros: " + ("all" if name is None else name),
 			description=output,
@@ -668,9 +664,7 @@ class ConfessionsUserCog(
 			in (
 				channel := interaction.guild.get_channel(VALID_CHANNELS[_channel]["id"])
 			).name
-		][
-			:25
-		]  # pyright: ignore[reportOptionalMemberAccess]
+		][:25]  # pyright: ignore[reportOptionalMemberAccess]
 
 	@app_commands.command(name="reply", description="Reply to a confession")
 	@app_commands.describe(id="Confession to reply to")
