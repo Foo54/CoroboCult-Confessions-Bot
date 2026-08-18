@@ -1,56 +1,20 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from corobot.config import MOD_ROLE_ID, LOG_CHANNEL_ID
+
 import typing
 import logging
-import sqlite3
-import datetime
+
+from corobot.channel_logger import ChannelLogger 
+from corobot.config import MOD_ROLE_ID, LOG_CHANNEL_ID
+from corobot.moderation_manager import ModerationDBManager, DB_PATH
 
 logger = logging.getLogger(__name__)
-DB_PATH = "data/moderation.db"
-
-
-class ModerationDBManager:
-	def __init__(self, db_path) -> None:
-		self.db_path = db_path
-
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute("""
-				CREATE TABLE IF NOT EXISTS mod_actions (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					action_time TIMESTAMP,
-					target_id INTEGER,
-					moderator_id INTEGER,
-					action_type CHAR(20),
-					reason TEXT
-				)
-			""")
-			conn.commit()
-
-	def log_mod_action(self, target_id: int, moderator_id: int, mod_action_type: str, reason: str):
-		with sqlite3.connect(self.db_path) as conn:
-			cursor = conn.cursor()
-			cursor.execute(
-				"""
-				INSERT INTO mod_actions (action_time, target_id, moderator_id, action_type, reason)
-					VALUES (?, ?, ?, ?, ?)
-				""",
-				(
-					int(datetime.datetime.now().timestamp()),
-					target_id,
-					moderator_id,
-					mod_action_type,
-					reason
-				)
-			)
-			conn.commit()
-
 
 @app_commands.default_permissions(moderate_members=True)
 class ModerationCog(
 	commands.GroupCog,
+	ChannelLogger,
 	ModerationDBManager,
 	name="mod",
 	description="Moderation commands",
@@ -58,24 +22,19 @@ class ModerationCog(
 
 	def __init__(self, bot, db_path, log_channel_id):
 		self.bot = bot
-		self.log_channel = None
-		self.log_channel_id = log_channel_id 
 		commands.Cog.__init__(self)
+		ChannelLogger.__init__(self, log_channel_id)
 		ModerationDBManager.__init__(self, db_path)
 
 	@commands.Cog.listener()
 	async def on_ready(self):
-		self.log_channel = self.bot.get_channel(self.log_channel_id)
-		if self.log_channel:
-			logger.info(f"Moderation logging channel has been set to {self.log_channel.id}")
-		else:
-			logger.warning("Moderation logging channel could not be set!")
-	
+		self.fetch_log_channel(self.bot)
+
 	async def cog_app_command_error(
-    self,
-    interaction: discord.Interaction,
-    error: app_commands.AppCommandError
-  ):
+		self,
+		interaction: discord.Interaction,
+		error: app_commands.AppCommandError
+	):
 		if isinstance(error, app_commands.errors.MissingRole):
 			return await interaction.response.send_message(
 				"You don't have the required role to use this command.", ephemeral=True
@@ -84,9 +43,9 @@ class ModerationCog(
 
 	@app_commands.command(name="log-here", description="Set the current log channel")
 	@app_commands.checks.has_role(MOD_ROLE_ID)
-	async def set_log_channel(self, interaction: discord.Interaction):
-		"""Set the current log channel"""
-		self.log_channel = interaction.channel
+	async def command_set_log_channel(self, interaction: discord.Interaction):
+		"""Command to set the current log channel"""
+		self.set_log_channel(interaction.channel)
 		await interaction.response.send_message(
 			f"Log channel updated {interaction.channel.mention}"
 		)
@@ -102,11 +61,6 @@ class ModerationCog(
 	):
 		"""Anonymous warning command (logged)"""
 		await interaction.response.defer(ephemeral=True)
-
-		if self.log_channel is None:
-			return await interaction.followup.send(
-				"No logging channel!", ephemeral=True
-			)
 
 		if not reason:
 			return await interaction.followup.send(
@@ -150,7 +104,7 @@ class ModerationCog(
 			embed.title = f"User: {target.display_name} has been warned!"
 			embed.add_field(name="target", value=target.mention)
 			embed.add_field(name="moderator", value=interaction.user.mention)
-			await self.log_channel.send(embed=embed)
+			await self.channel_log_embed(embed)
 
 
 async def setup(bot):
