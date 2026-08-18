@@ -26,9 +26,10 @@ class Corobot(commands.Bot):
 		super().__init__(*args, **kwargs)
 
 	async def setup_hook(self):
-		await self.load_extension("corobot.meta")
-		await self.load_extension("corobot.moderation")
-		await self.load_extension("corobot.confessions")
+		await self.load_extension("cogs.confessions")
+		await self.load_extension("cogs.loader")
+		await self.load_extension("cogs.meta")
+		await self.load_extension("cogs.moderation")
 
 		# sync
 		self.tree.copy_global_to(guild=guild)
