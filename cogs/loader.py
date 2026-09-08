@@ -19,26 +19,41 @@ class CogManager(
 		err_message = f"An error occurred: ```{error}```"
 		await interaction.response.send_message(err_message, ephemeral=True)
 	
-	@discord.app_commands.command(name="load", description="Load a cog by filename")
+	@app_commands.command(name="load", description="Load a cog by filename")
 	async def load_cog(self, interaction: discord.Interaction, cog_name: str):
 		await self.bot.load_extension(f"cogs.{cog_name}")
+
+		self.bot.tree.copy_global_to(guild=interaction.guild)
+		await self.bot.tree.sync(guild=interaction.guild)
+
 		await interaction.response.send_message(f"Successfully loaded `cogs.{cog_name}`", ephemeral=True)
 
-	@discord.app_commands.command(name="unload", description="Unload a cog by filename")
+	@app_commands.command(name="unload", description="Unload a cog by filename")
 	async def unload_cog(self, interaction: discord.Interaction, cog_name: str):
 		await self.bot.unload_extension(f"cogs.{cog_name}")
+
+		self.bot.tree.copy_global_to(guild=interaction.guild)
+		await self.bot.tree.sync(guild=interaction.guild)
+
 		await interaction.response.send_message(f"Successfully unloaded `cogs.{cog_name}`", ephemeral=True)
 
-	@discord.app_commands.command(name="reload", description="Reload a cog by filename")
+	@app_commands.command(name="reload", description="Reload a cog by filename")
 	async def reload_cog(self, interaction: discord.Interaction, cog_name: str):
 		await self.bot.reload_extension(f"cogs.{cog_name}")
+
+		self.bot.tree.copy_global_to(guild=interaction.guild)
+		await self.bot.tree.sync(guild=interaction.guild)
+
 		await interaction.response.send_message(f"Successfully reloaded `cogs.{cog_name}`", ephemeral=True)
 
-	@discord.app_commands.command(name="reload-all-cogs", description="Reload all cogs")
+	@app_commands.command(name="reload-all-cogs", description="Reload all cogs")
 	async def reload_all_cogs(self, interaction: discord.Interaction):
 		for filename in os.listdir("./cogs"):
 			cog_name = filename.removesuffix(".py")
 			await self.bot.reload_extension(f"cogs.{cog_name}")
+
+		self.bot.tree.copy_global_to(guild=interaction.guild)
+		await self.bot.tree.sync(guild=interaction.guild)
 
 		await interaction.response.send_message(f"Successfully reloaded all cogs", ephemeral=True)
 
